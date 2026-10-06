@@ -1,0 +1,34 @@
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Connecting : connect()
+    Connecting --> Connected : handshake ok
+    Connecting --> Idle : timeout
+
+    state Connected {
+        [*] --> Streaming
+        Streaming --> Paused : pause()
+        Paused --> Streaming : resume()
+        --
+        [*] --> BatteryOK
+        BatteryOK --> BatteryLow : below 15%
+    }
+
+    Connected --> check : link lost
+    state check <<choice>>
+    check --> Connecting : retries left
+    check --> Failed : retries == 0
+
+    state sync <<fork>>
+    Connected --> sync : disconnect()
+    sync --> FlushBuffer
+    sync --> SaveState
+    state done <<join>>
+    FlushBuffer --> done
+    SaveState --> done
+    done --> Idle
+
+    Failed --> [*]
+    note right of Failed
+        Requires a manual
+        restart
+    end note

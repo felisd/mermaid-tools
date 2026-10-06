@@ -1,0 +1,24 @@
+flowchart TD
+    start([Start]) --> input[/Read request/]
+    input --> valid{Valid?}
+    valid -- No --> err[Return 400]:::bad
+    valid -- Yes --> cache[(Cache)]
+    cache -->|hit| respond
+    cache -.->|miss| svc
+
+    subgraph backend [Backend services]
+        direction LR
+        svc[[Order service]] --> db[(Postgres)]
+        svc ==> queue>Event queue]
+        queue --> worker{{Worker}}
+    end
+
+    db --> respond[Return 200]:::good
+    worker --o audit((Audit log))
+    err --> stop([End])
+    respond --> stop
+
+    classDef good fill:#d4f4dd,stroke:#2e7d32,stroke-width:2px,color:#1b5e20
+    classDef bad fill:#fde0e0,stroke:#c62828,stroke-width:2px,color:#b71c1c
+    style backend fill:#f3f6fb,stroke:#5b7db1,stroke-dasharray: 5 5
+    linkStyle 2 stroke:#c62828,stroke-width:2px

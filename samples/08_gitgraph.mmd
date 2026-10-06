@@ -1,0 +1,22 @@
+gitGraph
+    commit id: "init"
+    commit id: "add CI"
+    branch develop
+    checkout develop
+    commit id: "scaffold"
+    branch feature/login
+    checkout feature/login
+    commit id: "form"
+    commit id: "validation"
+    checkout develop
+    merge feature/login
+    branch feature/search
+    commit id: "index"
+    checkout develop
+    commit id: "bump deps"
+    merge feature/search
+    checkout main
+    merge develop tag: "v1.0.0"
+    commit id: "hotfix" type: HIGHLIGHT
+    checkout develop
+    cherry-pick id: "hotfix"

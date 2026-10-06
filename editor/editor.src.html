@@ -1,0 +1,1298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mermaid Visual Editor</title>
+<style>
+:root {
+  --paper: #eef1f5;
+  --dot: #c5ccd6;
+  --panel: #ffffff;
+  --ink: #17202b;
+  --ink-2: #566272;
+  --ink-3: #8691a0;
+  --line: #d6dbe2;
+  --line-2: #e7eaef;
+  --accent: #cf1c6b;
+  --accent-soft: #fbe4ef;
+  --err: #b3261e;
+  --err-soft: #fdecea;
+  --code-bg: #fbfcfd;
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", "Noto Sans", sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { font: 13px/1.45 var(--sans); color: var(--ink); background: var(--panel); display: flex; flex-direction: column; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---- top bar ---- */
+#bar { display: flex; align-items: center; gap: 14px; padding: 7px 12px; border-bottom: 1px solid var(--line); flex: none; }
+#doc { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin-right: auto; }
+#fname { font-weight: 650; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32vw; }
+#dirty { color: var(--accent); font-size: 12px; visibility: hidden; }
+#dirty.on { visibility: visible; }
+#dtype { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+.grp { display: flex; gap: 4px; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 5px; padding: 4px 10px; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--ink-3); }
+.btn:disabled { color: var(--ink-3); cursor: default; }
+.btn.solid { background: var(--ink); border-color: var(--ink); color: #fff; }
+.btn.solid:hover { background: #2a3644; }
+.btn.danger { color: var(--err); }
+.menu { position: relative; }
+.menu-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 24px rgba(23, 32, 43, .14); padding: 4px; min-width: 190px; display: none; }
+.menu.open .menu-list { display: block; }
+.menu-list button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 10px; border-radius: 4px; }
+.menu-list button:hover { background: var(--paper); }
+
+/* ---- workspace ---- */
+#work { flex: 1; display: flex; min-height: 0; }
+#code { width: 340px; min-width: 180px; display: flex; flex-direction: column; background: var(--code-bg); flex: none; }
+#code.hidden { display: none; }
+#code.hidden + #split { display: none; }
+#edwrap { flex: 1; display: flex; min-height: 0; position: relative; }
+#gutter { width: 38px; padding: 10px 6px 10px 0; text-align: right; color: var(--ink-3); font: 12px/1.6 var(--mono); overflow: hidden; user-select: none; white-space: pre; border-right: 1px solid var(--line-2); flex: none; }
+#gutter .bad { color: #fff; background: var(--err); border-radius: 3px; padding: 0 3px; margin-right: -3px; }
+#src { flex: 1; border: 0; resize: none; padding: 10px 12px; font: 12px/1.6 var(--mono); background: transparent; white-space: pre; overflow: auto; tab-size: 4; min-width: 0; }
+#src:focus { outline: none; }
+#status { flex: none; padding: 7px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2); min-height: 32px; white-space: pre-wrap; max-height: 30%; overflow: auto; }
+#status.err { color: var(--err); background: var(--err-soft); font-family: var(--mono); font-size: 11.5px; }
+#split { width: 5px; cursor: col-resize; background: var(--line); flex: none; }
+#split:hover, #split.drag { background: var(--accent); }
+
+#canvas { flex: 1; position: relative; overflow: hidden; min-width: 0; touch-action: none; cursor: grab;
+  background-color: var(--paper); background-image: radial-gradient(var(--dot) 1px, transparent 1.2px); background-size: 20px 20px; }
+#canvas.dark { background-color: #1e1e1e; background-image: radial-gradient(#3a3d42 1px, transparent 1.2px); }
+#canvas.panning { cursor: grabbing; }
+#sheet { position: absolute; left: 0; top: 0; transform-origin: 0 0; user-select: none; -webkit-user-select: none; }
+#sheet.stale { opacity: .45; }
+#sheet svg { display: block; overflow: visible; }
+#sheet.editable g.node, #sheet.editable g.cluster, #sheet.editable g.edgeLabel, #sheet.editable .m-hit { cursor: pointer; }
+#sheet .m-hit { fill: none; stroke: transparent; stroke-width: 16px; pointer-events: stroke; }
+#sheet .m-sel { filter: drop-shadow(0 0 1.5px var(--accent)) drop-shadow(0 0 1.5px var(--accent)) drop-shadow(0 0 3px var(--accent)); }
+#sheet path.m-sel { stroke: var(--accent) !important; }
+#sheet g.node.m-target { filter: drop-shadow(0 0 2px var(--accent)) drop-shadow(0 0 5px var(--accent)); }
+
+#tools { position: absolute; left: 12px; top: 12px; display: flex; gap: 6px; z-index: 5; }
+#tools .btn, #zoom .btn { box-shadow: 0 1px 3px rgba(23, 32, 43, .1); }
+#zoom { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 4px; z-index: 5; }
+#zoom .btn { min-width: 30px; padding: 4px 8px; }
+#note { position: absolute; left: 12px; bottom: 12px; max-width: min(520px, calc(100% - 200px)); background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 5px; padding: 7px 10px; font-size: 12px; color: var(--ink-2); z-index: 5; display: none; }
+#note.on { display: block; }
+#empty { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: var(--ink-2); text-align: center; padding: 24px; pointer-events: none; }
+#empty.on { display: flex; }
+.handle { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; border: 2px solid #fff; z-index: 6; cursor: crosshair; display: none; font: 700 14px/15px var(--sans); text-align: center; padding: 0; box-shadow: 0 1px 4px rgba(23, 32, 43, .3); touch-action: none; }
+.handle.on { display: block; }
+#rubber { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 7; display: none; }
+#rubber.on { display: block; }
+#rubber line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
+#inline { position: absolute; z-index: 8; display: none; border: 2px solid var(--accent); border-radius: 5px; padding: 6px 8px; font: 14px/1.4 var(--sans); background: #fff; color: var(--ink); resize: none; box-shadow: 0 6px 20px rgba(23, 32, 43, .2); text-align: center; }
+#inline.on { display: block; }
+#toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 7px 14px; border-radius: 5px; font-size: 12.5px; z-index: 20; display: none; max-width: 80%; }
+#toast.on { display: block; }
+#toast.bad { background: var(--err); }
+
+/* ---- inspector ---- */
+#insp { width: 272px; border-left: 1px solid var(--line); padding: 14px 14px 20px; overflow: auto; flex: none; }
+#insp h2 { font-size: 14px; margin: 0 0 2px; font-weight: 650; }
+#insp .sub { color: var(--ink-3); font-size: 12px; margin: 0 0 12px; word-break: break-all; }
+.field { margin: 0 0 12px; }
+.field > label, .field > .lab { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
+.field input[type=text], .field input[type=number], .field select, .field textarea { width: 100%; border: 1px solid var(--line); border-radius: 5px; padding: 5px 7px; background: #fff; }
+.field textarea { resize: vertical; min-height: 54px; font-family: var(--sans); }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.seg button { flex: 1; border: 0; border-right: 1px solid var(--line); background: #fff; padding: 5px 4px; }
+.seg button:last-child { border-right: 0; }
+.seg button.on { background: var(--ink); color: #fff; }
+.shapes { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.shapes button { border: 1px solid var(--line); background: #fff; border-radius: 4px; padding: 3px 0 1px; }
+.shapes button svg { width: 26px; height: 16px; fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
+.shapes button.on { border-color: var(--accent); background: var(--accent-soft); }
+.shapes button.on svg { stroke: var(--accent); }
+.colors { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.color { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-2); }
+.color .row { display: flex; gap: 3px; align-items: center; }
+.color input[type=color] { width: 100%; height: 26px; padding: 1px; border: 1px solid var(--line); border-radius: 4px; background: #fff; cursor: pointer; }
+.color input.unset { opacity: .35; }
+.color .x { border: 0; background: none; color: var(--ink-3); padding: 0 2px; font-size: 14px; line-height: 1; }
+.color .x:hover { color: var(--err); }
+.check { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.tips { color: var(--ink-2); font-size: 12.5px; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--line-2); }
+.tips dt { font-weight: 600; color: var(--ink); margin-top: 7px; }
+.tips dd { margin: 0; }
+kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; background: #fff; }
+
+@media (max-width: 900px) {
+  #work { flex-direction: column; }
+  #code { width: auto !important; height: 34%; order: 3; border-top: 1px solid var(--line); }
+  #split { display: none; }
+  #insp { width: auto; max-height: 30%; border-left: 0; border-top: 1px solid var(--line); order: 2; }
+  #bar { flex-wrap: wrap; gap: 6px; }
+}
+</style>
+</head>
+<body>
+<header id="bar">
+  <div id="doc"><span id="fname">untitled.mmd</span><span id="dirty" title="Unsaved changes">●</span><span id="dtype"></span></div>
+  <div class="grp">
+    <div class="menu" id="newmenu"><button class="btn" id="bnew" aria-haspopup="true">New</button><div class="menu-list" id="newlist"></div></div>
+    <button class="btn" id="bopen" title="Open a .mmd file (Ctrl+O)">Open</button>
+    <button class="btn solid" id="bsave" title="Save (Ctrl+S)">Save</button>
+    <button class="btn" id="bsaveas">Save as</button>
+  </div>
+  <div class="grp">
+    <button class="btn" id="bundo" title="Undo (Ctrl+Z)">Undo</button>
+    <button class="btn" id="bredo" title="Redo (Ctrl+Y)">Redo</button>
+  </div>
+  <div class="grp">
+    <button class="btn" id="bpng" title="Download the diagram as a PNG image">Export PNG</button>
+    <button class="btn" id="bsvg" title="Download the diagram as an SVG image">Export SVG</button>
+  </div>
+  <button class="btn" id="bcode" title="Show or hide the Mermaid code">Hide code</button>
+</header>
+<main id="work">
+  <section id="code" aria-label="Mermaid code">
+    <div id="edwrap"><div id="gutter" aria-hidden="true"></div><textarea id="src" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Mermaid code"></textarea></div>
+    <div id="status"></div>
+  </section>
+  <div id="split" role="separator" aria-orientation="vertical"></div>
+  <section id="canvas" aria-label="Diagram">
+    <div id="sheet"></div>
+    <div id="tools">
+      <button class="btn" id="baddnode" title="Add a new box">Add node</button>
+      <button class="btn" id="bgroup" title="Put the selected nodes in a group (Shift-click to select several)">Group selected</button>
+    </div>
+    <button class="handle" id="h1" title="Drag to another node to connect. Drop on empty space to add a connected node." aria-label="Connect from this node">+</button>
+    <button class="handle" id="h2" title="Drag to another node to connect. Drop on empty space to add a connected node." aria-label="Connect from this node">+</button>
+    <svg id="rubber"><line x1="0" y1="0" x2="0" y2="0"/></svg>
+    <textarea id="inline" aria-label="Edit label"></textarea>
+    <div id="note"></div>
+    <div id="empty">Type Mermaid code on the left, or choose New to start from a template.</div>
+    <div id="zoom">
+      <button class="btn" id="zout" title="Zoom out">−</button>
+      <button class="btn" id="zfit" title="Fit the diagram to the window">Fit</button>
+      <button class="btn" id="zin" title="Zoom in">+</button>
+    </div>
+    <div id="toast" role="status"></div>
+  </section>
+  <aside id="insp" aria-label="Properties"></aside>
+</main>
+<input type="file" id="filein" accept=".mmd,.mermaid,.md,.txt,text/plain" hidden>
+
+<script>/*__MERMAID_JS__*/</script>
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v === true) e.setAttribute(k, "");
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null) e.append(kid);
+  return e;
+};
+
+/* ------------------------------------------------------------------ *
+ * Templates
+ * ------------------------------------------------------------------ */
+const TEMPLATES = {
+  "Flowchart": `flowchart TD
+    start(["Start"])
+    check{"Is it valid?"}
+    work["Process the data"]
+    fail["Show an error"]
+    stop(["End"])
+    start --> check
+    check -->|"Yes"| work
+    check -->|"No"| fail
+    work --> stop
+    fail --> stop
+`,
+  "Sequence diagram": `sequenceDiagram
+    actor User
+    participant App
+    participant API as API Server
+    User->>App: Tap "Sign in"
+    App->>API: POST /login
+    alt Password is correct
+        API-->>App: 200 OK and token
+    else Password is wrong
+        API-->>App: 401 Unauthorized
+    end
+    App-->>User: Show result
+`,
+  "Class diagram": `classDiagram
+    class Animal {
+        +String name
+        +speak() String
+    }
+    class Dog {
+        +fetch() void
+    }
+    Animal <|-- Dog
+`,
+  "State diagram": `stateDiagram-v2
+    [*] --> Idle
+    Idle --> Running : start
+    Running --> Paused : pause
+    Paused --> Running : resume
+    Running --> Idle : stop
+    Idle --> [*]
+`,
+  "ER diagram": `erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ ORDER_ITEM : contains
+    CUSTOMER {
+        int id PK
+        string name
+    }
+    ORDER {
+        int id PK
+        date created_at
+    }
+    ORDER_ITEM {
+        int quantity
+    }
+`,
+  "Gantt chart": `gantt
+    title Project plan
+    dateFormat YYYY-MM-DD
+    section Design
+    Requirements :done, req, 2026-01-05, 7d
+    Wireframes   :active, wire, after req, 8d
+    section Build
+    Backend      :back, after wire, 15d
+    Testing      :test, after back, 7d
+`,
+  "Mind map": `mindmap
+  root((Main topic))
+    Branch one
+      Detail A
+      Detail B
+    Branch two
+      Detail C
+`,
+  "Pie chart": `pie showData
+    title Tickets by category
+    "Billing" : 40
+    "Login" : 25
+    "Bugs" : 20
+    "Other" : 15
+`,
+};
+
+/* ------------------------------------------------------------------ *
+ * State
+ * ------------------------------------------------------------------ */
+const S = {
+  text: "", saved: "", fileName: "untitled.mmd", handle: null,
+  hist: [], hpos: -1,
+  model: null, type: "", canEdit: false, whyNot: "",
+  sel: [],                       // [{kind:'node'|'edge'|'sub', id}]
+  view: { x: 40, y: 60, k: 1 }, size: { w: 0, h: 0 }, needFit: true,
+  seq: 0, rid: 0, tidyWarned: false, pendingEdit: null, lastSvg: "",
+};
+const src = $("#src"), sheet = $("#sheet"), canvas = $("#canvas"), insp = $("#insp");
+
+mermaid.initialize({ startOnLoad: false, securityLevel: "strict", suppressErrorRendering: true, logLevel: "fatal" });
+
+/* ------------------------------------------------------------------ *
+ * Label text: database form <-> source form <-> what the user types
+ * ------------------------------------------------------------------ */
+const tpl = document.createElement("template");
+const htmlNorm = (s) => { tpl.innerHTML = s; return tpl.innerHTML; };
+
+/** Text as mermaid's parser stores it -> text as it is written in a .mmd file (quotes left raw). */
+function fromDb(t) {
+  if (t == null) return "";
+  let s = String(t);
+  // The parser HTML-escapes & < >. Undo that where it means the same thing, so "x > 0 && y" stays readable.
+  const all = s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  if (all !== s && htmlNorm(all) === s) s = all;
+  else { const amp = s.replace(/&amp;/g, "&"); if (amp !== s && htmlNorm(amp) === s) s = amp; }
+  return s.replace(/ﬂ°°(\d+)¶ß/g, "#$1;").replace(/ﬂ°(\w+)¶ß/g, "#$1;").replace(/#quot;/g, '"').replace(/<br\s*\/?>/gi, "<br/>");
+}
+/** Source form -> quoted Mermaid string. */
+function quote(label, md) {
+  const s = String(label).replace(/<[^<>]*>/g, (tag) => tag.replace(/"/g, "'")).replace(/"/g, "#quot;");
+  return md ? '"`' + s.replace(/`/g, "'") + '`"' : '"' + s + '"';
+}
+const toEdit = (label, md) => (md ? label : label.replace(/<br\/>/g, "\n"));
+const fromEdit = (v, md) => { v = v.replace(/\r/g, "").trim(); return md ? v : v.replace(/\n/g, "<br/>"); };
+
+/* ------------------------------------------------------------------ *
+ * Flowchart model: built from mermaid's own parser, written back as tidy Mermaid
+ * ------------------------------------------------------------------ */
+const SHAPES = {
+  square: ["[", "]"], round: ["(", ")"], stadium: ["([", "])"], subroutine: ["[[", "]]"], cylinder: ["[(", ")]"],
+  circle: ["((", "))"], doublecircle: ["(((", ")))"], diamond: ["{", "}"], hexagon: ["{{", "}}"], odd: [">", "]"],
+  lean_right: ["[/", "/]"], lean_left: ["[\\", "\\]"], trapezoid: ["[/", "\\]"], inv_trapezoid: ["[\\", "/]"],
+};
+const SHAPE_UI = [
+  ["square", "Rectangle", '<rect x="3" y="3" width="26" height="14"/>'],
+  ["round", "Rounded", '<rect x="3" y="3" width="26" height="14" rx="4"/>'],
+  ["stadium", "Pill (start / end)", '<rect x="3" y="3" width="26" height="14" rx="7"/>'],
+  ["diamond", "Decision", '<polygon points="16,2 29,10 16,18 3,10"/>'],
+  ["circle", "Circle", '<circle cx="16" cy="10" r="7.5"/>'],
+  ["cylinder", "Database", '<path d="M5 6a11 3 0 0 0 22 0a11 3 0 0 0-22 0v8a11 3 0 0 0 22 0v-8"/>'],
+  ["hexagon", "Hexagon", '<polygon points="8,3 24,3 29,10 24,17 8,17 3,10"/>'],
+  ["subroutine", "Subroutine", '<rect x="3" y="3" width="26" height="14"/><path d="M7 3v14M25 3v14"/>'],
+  ["lean_right", "Input / output", '<polygon points="8,3 29,3 24,17 3,17"/>'],
+  ["lean_left", "Input / output (reversed)", '<polygon points="3,3 24,3 29,17 8,17"/>'],
+  ["trapezoid", "Trapezoid", '<polygon points="9,3 23,3 29,17 3,17"/>'],
+  ["inv_trapezoid", "Inverted trapezoid", '<polygon points="3,3 29,3 23,17 9,17"/>'],
+  ["doublecircle", "Double circle", '<circle cx="16" cy="10" r="8"/><circle cx="16" cy="10" r="5.5"/>'],
+  ["odd", "Flag", '<polygon points="3,3 29,3 29,17 3,17 8,10"/>'],
+];
+const normDir = (d) => (d === "TD" ? "TB" : d || "TB");
+const clone = (m) => JSON.parse(JSON.stringify(m));
+
+function buildModel(text, db) {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  let i = 0;
+  if (/^\s*---\s*$/.test(lines[0] || "")) {
+    let j = 1;
+    while (j < lines.length && !/^\s*---\s*$/.test(lines[j])) j++;
+    i = j + 1;
+  }
+  let h = -1;
+  for (let k = i; k < lines.length; k++) {
+    if (/^\s*(flowchart(-elk)?|graph)\b/.test(lines[k])) { h = k; break; }
+    if (/^\s*$/.test(lines[k]) || /^\s*%%/.test(lines[k])) continue;
+    break;
+  }
+  if (h < 0) return null;
+  const hm = lines[h].match(/^\s*(flowchart(?:-elk)?|graph)(?:[ \t]+(TB|TD|BT|RL|LR))?/);
+  const after = lines.slice(h + 1);
+  const subs = db.getSubGraphs().map((s) => ({
+    id: s.id, title: fromDb(s.title ?? s.id), md: s.labelType === "markdown", dir: s.hasExplicitDir ? s.dir || "" : "",
+    nodes: [...(s.nodes || [])], classes: [...(s.classes || [])], styles: [],
+  }));
+  const subIds = new Set(subs.map((s) => s.id));
+  const nodes = [];
+  for (const v of db.getVertices().values()) {
+    if (subIds.has(v.id)) {   // "style group1 fill:..." is stored on a phantom vertex
+      const s = subs.find((x) => x.id === v.id);
+      s.styles = [...(v.styles || [])];
+      for (const c of v.classes || []) if (c !== "clickable" && !s.classes.includes(c)) s.classes.push(c);
+      continue;
+    }
+    const extra = {};
+    for (const k of ["icon", "form", "pos", "img", "constraint", "assetWidth", "assetHeight"]) if (v[k] != null && v[k] !== "") extra[k] = v[k];
+    nodes.push({
+      id: v.id, label: fromDb(v.text ?? v.id), md: v.labelType === "markdown", shape: v.type || "",
+      styles: [...(v.styles || [])], classes: (v.classes || []).filter((c) => c !== "clickable"), extra,
+    });
+  }
+  const rawEdges = db.getEdges();
+  const edges = rawEdges.map((e) => ({
+    id: e.id, userId: !!e.isUserDefinedId, start: e.start, end: e.end, type: e.type || "arrow_point", stroke: e.stroke || "normal",
+    length: e.length || 1, label: fromDb(e.text || ""), md: e.labelType === "markdown",
+    style: (e.style || []).filter((s) => s !== "fill:none"), interpolate: e.interpolate || "",
+  }));
+  const classDefs = [...db.getClasses().values()].map((c) => ({ id: c.id, styles: [...(c.styles || [])] }));
+  let accTitle = "", accDescr = "";
+  try { accTitle = db.getAccTitle?.() || ""; accDescr = db.getAccDescription?.() || ""; } catch (_) {}
+  return {
+    pre: lines.slice(0, h).join("\n"), keyword: hm ? hm[1] : "flowchart", dir: (hm && hm[2]) || db.getDirection() || "TD",
+    comments: after.filter((l) => /^\s*%%(?!\{)/.test(l)).map((l) => l.trim()),
+    clicks: after.filter((l) => /^\s*click\s+\S+/.test(l)).map((l) => l.trim()),
+    accTitle, accDescr, nodes, edges, subs, classDefs,
+    edgeDefault: { style: [...(rawEdges.defaultStyle || [])].filter((s) => s !== "fill:none"), interpolate: rawEdges.defaultInterpolate || "" },
+  };
+}
+
+/** Which group each node / group sits in. Mirrors mermaid: the earliest-listed group wins. */
+function parents(m) {
+  const p = new Map();
+  for (let i = m.subs.length - 1; i >= 0; i--) for (const id of m.subs[i].nodes) p.set(id, m.subs[i].id);
+  return p;
+}
+
+function arrow(e) {
+  const L = Math.max(1, e.length || 1);
+  const dbl = e.type.startsWith("double_");
+  const head = e.type.replace("double_", "").replace("arrow_", "");
+  const hc = { point: ">", circle: "o", cross: "x", open: "" }[head] ?? ">";
+  const lc = dbl ? { point: "<", circle: "o", cross: "x" }[head] || "" : "";
+  if (e.stroke === "invisible") return "~".repeat(L + 2);
+  if (e.stroke === "thick") return lc + (hc ? "=".repeat(L + 1) + hc : "=".repeat(L + 2));
+  if (e.stroke === "dotted") return lc + "-" + ".".repeat(L) + "-" + hc;
+  return lc + (hc ? "-".repeat(L + 1) + hc : "-".repeat(L + 2));
+}
+
+function nodeLine(n) {
+  const sh = n.shape || "";
+  const hasExtra = n.extra && Object.keys(n.extra).length;
+  if (!hasExtra && (sh === "" || sh === "square") && n.label === n.id && !n.md && sh === "") return n.id;
+  if (!hasExtra && SHAPES[sh || "square"]) {
+    const [a, b] = SHAPES[sh || "square"];
+    return n.id + a + quote(n.label, n.md) + b;
+  }
+  const parts = [];
+  if (sh && !n.extra.icon && !n.extra.img) parts.push("shape: " + sh);
+  const map = { icon: "icon", form: "form", img: "img", pos: "pos", constraint: "constraint", assetWidth: "w", assetHeight: "h" };
+  for (const [k, out] of Object.entries(map)) {
+    if (n.extra[k] == null) continue;
+    parts.push(out + ": " + (typeof n.extra[k] === "number" ? n.extra[k] : '"' + String(n.extra[k]).replace(/"/g, "'") + '"'));
+  }
+  parts.push('label: "' + n.label.replace(/"/g, "'") + '"');
+  return n.id + "@{ " + parts.join(", ") + " }";
+}
+
+function serialize(m) {
+  const out = [];
+  if (m.pre.trim()) out.push(m.pre.replace(/\s+$/, ""));
+  out.push(m.keyword + " " + m.dir);
+  const I = "    ";
+  for (const c of m.comments) out.push(I + c);
+  if (m.accTitle) out.push(I + "accTitle: " + m.accTitle);
+  if (m.accDescr) out.push(m.accDescr.includes("\n") ? I + "accDescr {\n" + m.accDescr + "\n" + I + "}" : I + "accDescr: " + m.accDescr);
+
+  const par = parents(m);
+  const subById = new Map(m.subs.map((s) => [s.id, s]));
+  const nodeById = new Map(m.nodes.map((n) => [n.id, n]));
+  const done = new Set();
+  const emitSub = (s, depth) => {
+    if (done.has(s.id)) return;
+    done.add(s.id);
+    const pad = I.repeat(depth);
+    out.push(pad + "subgraph " + s.id + " [" + quote(s.title, s.md) + "]");
+    if (s.dir) out.push(pad + I + "direction " + s.dir);
+    // members in the order the nodes were first declared, then nested groups
+    for (const n of m.nodes) if (par.get(n.id) === s.id) out.push(pad + I + nodeLine(n));
+    for (const c of m.subs) if (par.get(c.id) === s.id) emitSub(c, depth + 1);
+    out.push(pad + "end");
+  };
+  const rootOf = (id) => { let cur = id, guard = 0; while (par.has(cur) && guard++ < 100) cur = par.get(cur); return cur; };
+  for (const n of m.nodes) {
+    if (!par.has(n.id)) { out.push(I + nodeLine(n)); continue; }
+    const root = subById.get(rootOf(n.id));
+    if (root) emitSub(root, 1);
+  }
+  for (const s of m.subs) if (!done.has(s.id)) { const root = subById.get(rootOf(s.id)) || s; emitSub(root, 1); }
+
+  if (m.edges.length) out.push("");
+  for (const e of m.edges) {
+    const a = (e.userId && e.id ? e.id + "@" : "") + arrow(e);
+    out.push(I + e.start + " " + a + (e.label ? "|" + quote(e.label, e.md) + "|" : "") + " " + e.end);
+  }
+
+  const tail = [];
+  for (const c of m.classDefs) if (c.styles.length) tail.push(I + "classDef " + c.id + " " + c.styles.join(","));
+  const byClass = new Map();
+  for (const x of [...m.nodes, ...m.subs]) for (const c of x.classes) { if (!byClass.has(c)) byClass.set(c, []); byClass.get(c).push(x.id); }
+  for (const [c, ids] of byClass) tail.push(I + "class " + ids.join(",") + " " + c);
+  for (const x of [...m.nodes, ...m.subs]) if (x.styles.length) tail.push(I + "style " + x.id + " " + x.styles.join(","));
+  if (m.edgeDefault.style.length) tail.push(I + "linkStyle default " + m.edgeDefault.style.join(","));
+  if (m.edgeDefault.interpolate) tail.push(I + "linkStyle default interpolate " + m.edgeDefault.interpolate);
+  m.edges.forEach((e, i) => {
+    if (e.interpolate) tail.push(I + "linkStyle " + i + " interpolate " + e.interpolate + (e.style.length ? " " + e.style.join(",") : ""));
+    else if (e.style.length) tail.push(I + "linkStyle " + i + " " + e.style.join(","));
+  });
+  const ids = new Set([...nodeById.keys()]);
+  for (const c of m.clicks) { const id = c.split(/\s+/)[1]; if (ids.has(id)) tail.push(I + c); }
+  if (tail.length) out.push("", ...tail);
+  return out.join("\n") + "\n";
+}
+
+/** Everything that must survive a rewrite, in a comparable form (label text is checked separately). */
+function signature(m) {
+  const par = parents(m);
+  const P = (id) => par.get(id) || "";
+  return JSON.stringify({
+    dir: normDir(m.dir),
+    nodes: m.nodes.map((n) => [n.id, n.shape || "square", P(n.id), n.styles, [...n.classes].sort()]).sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+    edges: m.edges.map((e) => [e.start, e.end, e.type, e.stroke, e.length, e.style, e.interpolate, e.userId ? e.id : ""]),
+    subs: m.subs.map((s) => [s.id, P(s.id), s.dir || "", s.styles, [...s.classes].sort()]).sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+    classDefs: m.classDefs.filter((c) => c.styles.length).map((c) => [c.id, c.styles]).sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+    ed: m.edgeDefault,
+  });
+}
+const labelSig = (m) => JSON.stringify([m.nodes.map((n) => [n.id, htmlNorm(n.label)]).sort(), m.edges.map((e) => htmlNorm(e.label)), m.subs.map((s) => [s.id, htmlNorm(s.title)]).sort()]);
+
+async function parseFlow(text) {
+  const d = await mermaid.mermaidAPI.getDiagramFromText(text);
+  if (!/^flowchart/.test(d.type)) return null;
+  return buildModel(text, d.db);
+}
+
+/* ------------------------------------------------------------------ *
+ * Applying a visual edit: change the model, write Mermaid, prove it parses back to the same thing
+ * ------------------------------------------------------------------ */
+async function commit(change, opts = {}) {
+  if (!S.canEdit || !S.model) return false;
+  const m = clone(S.model);
+  const res = change(m);
+  if (res === false) return false;
+  const text = serialize(m);
+  let back;
+  try { back = await parseFlow(text); } catch (e) { toast("That change would make the diagram invalid, so it was not applied.", true); console.warn(e, text); return false; }
+  if (!back || signature(back) !== signature(m)) {
+    console.warn("round-trip mismatch", back && signature(back), signature(m), text);
+    toast("That change could not be written safely as Mermaid, so it was not applied.", true);
+    return false;
+  }
+  if (!S.tidyWarned && serialize(S.model) !== S.text) {
+    S.tidyWarned = true;
+    toast("The code was rewritten in a tidy standard layout. Undo brings your formatting back.");
+  }
+  if (opts.select) { S.sel = opts.select; S.reveal = true; }
+  if (opts.then) S.pendingEdit = opts.then;
+  setText(text, { record: true });
+  return true;
+}
+
+const allIds = (m) => new Set([...m.nodes.map((n) => n.id), ...m.subs.map((s) => s.id)]);
+function freshId(m, base) { const ids = allIds(m); let i = 1; while (ids.has(base + i)) i++; return base + i; }
+const RESERVED = new Set(["end", "subgraph", "graph", "flowchart", "style", "class", "classDef", "click", "linkStyle", "direction", "default"]);
+const validId = (id) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(id) && !RESERVED.has(id) && !/^(o|x)$/i.test(id);
+
+function setStyleProp(styles, prop, value) {
+  const rest = styles.filter((s) => s.split(":")[0].trim() !== prop);
+  if (value) rest.push(prop + ":" + value);
+  return rest;
+}
+const getStyleProp = (styles, prop) => { const s = styles.find((x) => x.split(":")[0].trim() === prop); return s ? s.slice(s.indexOf(":") + 1).trim() : ""; };
+
+const ops = {
+  addNode(parentSub) {
+    let id;
+    return commit((m) => {
+      id = freshId(m, "n");
+      m.nodes.push({ id, label: "New step", md: false, shape: "square", styles: [], classes: [], extra: {} });
+      if (parentSub) m.subs.find((s) => s.id === parentSub)?.nodes.push(id);
+    }, { get select() { return [{ kind: "node", id }]; }, get then() { return { kind: "node", id }; } });
+  },
+  addChild(fromId) {
+    let id;
+    return commit((m) => {
+      id = freshId(m, "n");
+      m.nodes.push({ id, label: "New step", md: false, shape: "square", styles: [], classes: [], extra: {} });
+      const p = parents(m).get(fromId);
+      if (p) m.subs.find((s) => s.id === p).nodes.push(id);
+      m.edges.push({ start: fromId, end: id, type: "arrow_point", stroke: "normal", length: 1, label: "", md: false, style: [], interpolate: "" });
+    }, { get select() { return [{ kind: "node", id }]; }, get then() { return { kind: "node", id }; } });
+  },
+  connect(a, b) {
+    return commit((m) => { m.edges.push({ start: a, end: b, type: "arrow_point", stroke: "normal", length: 1, label: "", md: false, style: [], interpolate: "" }); },
+      { select: [{ kind: "edge", id: String(S.model.edges.length) }] });
+  },
+  node(id, fn) { return commit((m) => { const n = m.nodes.find((x) => x.id === id); if (!n) return false; return fn(n, m); }); },
+  edge(idx, fn) { return commit((m) => { const e = m.edges[idx]; if (!e) return false; return fn(e, m); }); },
+  sub(id, fn) { return commit((m) => { const s = m.subs.find((x) => x.id === id); if (!s) return false; return fn(s, m); }); },
+  rename(oldId, newId) {
+    if (oldId === newId) return false;
+    if (!validId(newId)) { toast("An ID needs to start with a letter and use only letters, digits and underscores.", true); return false; }
+    if (allIds(S.model).has(newId)) { toast("Another item already uses the ID “" + newId + "”.", true); return false; }
+    return commit((m) => {
+      for (const n of m.nodes) if (n.id === oldId) { if (n.label === oldId) n.label = newId; n.id = newId; }
+      for (const e of m.edges) { if (e.start === oldId) e.start = newId; if (e.end === oldId) e.end = newId; }
+      for (const s of m.subs) s.nodes = s.nodes.map((x) => (x === oldId ? newId : x));
+      m.clicks = m.clicks.map((c) => c.replace(/^click\s+\S+/, (t) => (t.split(/\s+/)[1] === oldId ? "click " + newId : t)));
+    }, { select: [{ kind: "node", id: newId }] });
+  },
+  moveToGroup(id, subId) {
+    return commit((m) => {
+      for (const s of m.subs) s.nodes = s.nodes.filter((x) => x !== id);
+      if (subId) m.subs.find((s) => s.id === subId)?.nodes.push(id);
+    });
+  },
+  remove(sel) {
+    return commit((m) => {
+      const nodeIds = new Set(sel.filter((s) => s.kind === "node").map((s) => s.id));
+      const edgeIdx = new Set(sel.filter((s) => s.kind === "edge").map((s) => +s.id));
+      for (const s of sel.filter((x) => x.kind === "sub")) {         // remove the frame, keep what is inside
+        const sub = m.subs.find((x) => x.id === s.id);
+        if (!sub) continue;
+        const parent = parents(m).get(sub.id);
+        const members = sub.nodes;
+        m.subs = m.subs.filter((x) => x !== sub);
+        for (const o of m.subs) o.nodes = o.nodes.filter((x) => x !== sub.id);
+        if (parent) m.subs.find((x) => x.id === parent)?.nodes.push(...members);
+        m.edges = m.edges.filter((e) => e.start !== sub.id && e.end !== sub.id);
+      }
+      m.edges = m.edges.filter((e, i) => !edgeIdx.has(i) && !nodeIds.has(e.start) && !nodeIds.has(e.end));
+      m.nodes = m.nodes.filter((n) => !nodeIds.has(n.id));
+      for (const s of m.subs) s.nodes = s.nodes.filter((x) => !nodeIds.has(x));
+    }, { select: [] });
+  },
+  group(ids) {
+    let gid;
+    return commit((m) => {
+      gid = freshId(m, "group");
+      const par = parents(m);
+      const common = par.get(ids[0]);
+      const sameParent = ids.every((i) => par.get(i) === common);
+      for (const s of m.subs) s.nodes = s.nodes.filter((x) => !ids.includes(x));
+      m.subs.unshift({ id: gid, title: "Group", md: false, dir: "", nodes: [...ids], classes: [], styles: [] });
+      if (sameParent && common) m.subs.find((s) => s.id === common)?.nodes.push(gid);
+    }, { get select() { return [{ kind: "sub", id: gid }]; }, get then() { return { kind: "sub", id: gid }; } });
+  },
+  direction(d) { return commit((m) => { m.dir = d; }); },
+};
+
+/* ------------------------------------------------------------------ *
+ * Text, history, rendering
+ * ------------------------------------------------------------------ */
+function setText(text, { record = false, fromEditor = false, reset = false } = {}) {
+  S.text = text;
+  if (!fromEditor && src.value !== text) src.value = text;
+  if (reset) { S.hist = [text]; S.hpos = 0; S.saved = text; S.tidyWarned = false; S.sel = []; S.needFit = true; }
+  else if (record) pushHistory(text);
+  updateChrome();
+  drawGutter();
+  try { localStorage.setItem("mermaid-visual-editor", JSON.stringify({ text, fileName: S.fileName })); } catch (_) {}
+  return refresh();
+}
+function pushHistory(text) {
+  if (S.hist[S.hpos] === text) return;
+  S.hist = S.hist.slice(0, S.hpos + 1);
+  S.hist.push(text);
+  if (S.hist.length > 300) S.hist.shift();
+  S.hpos = S.hist.length - 1;
+}
+function undo() { if (S.hpos > 0) { S.hpos--; setText(S.hist[S.hpos]); } }
+function redo() { if (S.hpos < S.hist.length - 1) { S.hpos++; setText(S.hist[S.hpos]); } }
+
+function updateChrome() {
+  $("#fname").textContent = S.fileName;
+  $("#dirty").classList.toggle("on", S.text !== S.saved);
+  $("#bundo").disabled = S.hpos <= 0;
+  $("#bredo").disabled = S.hpos >= S.hist.length - 1;
+  document.title = (S.text !== S.saved ? "● " : "") + S.fileName + " - Mermaid Visual Editor";
+}
+let badLine = 0;
+function drawGutter() {
+  const n = S.text.split("\n").length;
+  const g = $("#gutter");
+  g.textContent = "";
+  for (let i = 1; i <= n; i++) { const s = el("span", i === badLine ? { class: "bad" } : {}, String(i)); g.append(s, "\n"); }
+  g.scrollTop = src.scrollTop;
+}
+function setStatus(msg, isErr = false) { const s = $("#status"); s.textContent = msg; s.classList.toggle("err", isErr); }
+let toastTimer;
+function toast(msg, bad = false) {
+  const t = $("#toast"); t.textContent = msg; t.className = "on" + (bad ? " bad" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.className = ""), bad ? 5200 : 3800);
+}
+
+const TYPE_NAMES = { "flowchart-v2": "Flowchart", flowchart: "Flowchart", "flowchart-elk": "Flowchart", sequence: "Sequence diagram", class: "Class diagram", classDiagram: "Class diagram", stateDiagram: "State diagram", state: "State diagram", er: "ER diagram", gantt: "Gantt chart", pie: "Pie chart", mindmap: "Mind map", timeline: "Timeline", journey: "User journey", gitGraph: "Git graph", quadrantChart: "Quadrant chart", xychart: "XY chart", sankey: "Sankey diagram", requirement: "Requirement diagram", c4: "C4 diagram", kanban: "Kanban board", block: "Block diagram", packet: "Packet diagram", architecture: "Architecture diagram" };
+
+let chain = Promise.resolve();
+function refresh() { const p = chain.then(doRefresh, doRefresh); chain = p.catch(() => {}); return p; }
+async function doRefresh() {
+  const seq = ++S.seq, text = S.text;
+  hideHandles();
+  if (!text.trim()) {
+    sheet.textContent = ""; S.model = null; S.type = ""; S.canEdit = false; S.lastSvg = "";
+    $("#empty").classList.add("on"); $("#dtype").textContent = ""; badLine = 0; drawGutter();
+    setStatus(""); showNote(""); renderInspector(); return;
+  }
+  $("#empty").classList.remove("on");
+  let diagram, out;
+  try {
+    diagram = await mermaid.mermaidAPI.getDiagramFromText(text);
+    out = await mermaid.render("mv" + ++S.rid, text);
+  } catch (e) {
+    if (seq !== S.seq) return;
+    $$('body > [id^="dmv"], body > [id^="imv"]').forEach((x) => x.remove());
+    const msg = String((e && e.message) || e);
+    const lm = msg.match(/line (\d+)/i);
+    badLine = lm && +lm[1] <= text.split("\n").length ? +lm[1] : 0;
+    drawGutter();
+    setStatus(msg, true);
+    sheet.classList.add("stale");
+    S.canEdit = false; sheet.classList.remove("editable");
+    showNote(sheet.firstChild ? "The code has an error, so the picture shows the last version that worked." : "");
+    renderInspector();
+    return;
+  }
+  if (seq !== S.seq) return;
+  badLine = 0; drawGutter();
+  sheet.classList.remove("stale");
+  sheet.innerHTML = out.svg;
+  S.lastSvg = out.svg;
+  const svg = sheet.querySelector("svg");
+  const vb = svg.viewBox.baseVal;
+  const w = vb && vb.width ? vb.width : svg.getBoundingClientRect().width, h = vb && vb.height ? vb.height : svg.getBoundingClientRect().height;
+  svg.style.maxWidth = "none"; svg.setAttribute("width", w); svg.setAttribute("height", h);
+  S.size = { w, h };
+  let dark = false;
+  try { const c = mermaid.mermaidAPI.getConfig(); dark = c.theme === "dark" || c.darkMode === true; } catch (_) {}
+  canvas.classList.toggle("dark", dark);
+
+  S.type = diagram.type;
+  $("#dtype").textContent = TYPE_NAMES[S.type] || S.type;
+  S.model = null; S.canEdit = false; S.whyNot = "";
+  if (/^flowchart/.test(S.type)) {
+    try {
+      const m = buildModel(text, diagram.db);
+      const back = m && (await parseFlow(serialize(m)));
+      if (seq !== S.seq) return;
+      if (m && back && signature(back) === signature(m)) { S.model = m; S.canEdit = true; if (labelSig(back) !== labelSig(m)) console.info("label text normalised on rewrite"); }
+      else S.whyNot = "This flowchart uses syntax the visual editor cannot rewrite safely. Edit it in the code pane.";
+    } catch (e) { console.warn(e); S.whyNot = "This flowchart uses syntax the visual editor cannot rewrite safely. Edit it in the code pane."; }
+  } else {
+    S.whyNot = "Click-to-edit works on flowcharts. This is a " + (TYPE_NAMES[S.type] || S.type).toLowerCase() + ": edit it in the code pane and the picture follows.";
+  }
+  sheet.classList.toggle("editable", S.canEdit);
+  $("#baddnode").disabled = !S.canEdit;
+  showNote(S.whyNot);
+  if (S.canEdit) decorate(svg);
+  // keep only selections that still exist
+  S.sel = S.canEdit ? S.sel.filter((s) => (s.kind === "node" ? S.model.nodes.some((n) => n.id === s.id) : s.kind === "sub" ? S.model.subs.some((x) => x.id === s.id) : +s.id < S.model.edges.length)) : [];
+  setStatus(S.canEdit ? S.model.nodes.length + " nodes, " + S.model.edges.length + " links" : (TYPE_NAMES[S.type] || S.type) + " rendered");
+  if (S.needFit) { S.needFit = false; fit(); } else applyView();
+  if (S.reveal) { S.reveal = false; if (S.sel.length === 1) reveal(elementFor(S.sel[0])); }
+  paintSelection();
+  renderInspector();
+  if (S.pendingEdit) { const p = S.pendingEdit; S.pendingEdit = null; requestAnimationFrame(() => startInline(p)); }
+}
+function showNote(msg) { const n = $("#note"); n.textContent = msg; n.classList.toggle("on", !!msg); }
+
+/* ------------------------------------------------------------------ *
+ * Linking the drawn SVG back to the model
+ * ------------------------------------------------------------------ */
+function decorate(svg) {
+  for (const p of $$("path.flowchart-link", svg)) {
+    const hit = p.cloneNode(false);
+    hit.removeAttribute("id"); hit.removeAttribute("marker-end"); hit.removeAttribute("marker-start"); hit.removeAttribute("style");
+    hit.setAttribute("class", "m-hit");
+    p.after(hit);
+  }
+}
+const prefix = () => "mv" + S.rid + "-";
+function nodeIdOf(g) { const m = g.id.match(new RegExp("^" + prefix() + "flowchart-(.+)-\\d+$")); return m ? m[1] : null; }
+function edgeIndexOf(dataId) { return S.model ? S.model.edges.findIndex((e) => e.id === dataId) : -1; }
+function hitTest(target) {
+  if (!S.canEdit || !(target instanceof Element) || !sheet.contains(target)) return null;
+  const node = target.closest("g.node");
+  if (node) { const id = nodeIdOf(node); if (id && S.model.nodes.some((n) => n.id === id)) return { kind: "node", id }; }
+  const hit = target.closest(".m-hit, path.flowchart-link");
+  if (hit) { const i = edgeIndexOf(hit.getAttribute("data-id")); if (i >= 0) return { kind: "edge", id: String(i) }; }
+  const lab = target.closest("g.edgeLabel");
+  if (lab) { const inner = lab.querySelector("[data-id]"); const i = inner ? edgeIndexOf(inner.getAttribute("data-id")) : -1; if (i >= 0) return { kind: "edge", id: String(i) }; }
+  const cl = target.closest("g.cluster");
+  if (cl && cl.id.startsWith(prefix())) { const id = cl.id.slice(prefix().length); if (S.model.subs.some((s) => s.id === id)) return { kind: "sub", id }; }
+  return null;
+}
+function elementFor(s) {
+  if (s.kind === "node") return $$("g.node", sheet).find((g) => nodeIdOf(g) === s.id) || null;
+  if (s.kind === "sub") return document.getElementById(prefix() + s.id);
+  const e = S.model && S.model.edges[+s.id];
+  return e ? sheet.querySelector('path.flowchart-link[data-id="' + CSS.escape(e.id) + '"]') : null;
+}
+function labelElementFor(s) {
+  if (s.kind !== "edge") return elementFor(s);
+  const e = S.model.edges[+s.id];
+  const lab = e && sheet.querySelector('g.edgeLabel [data-id="' + CSS.escape(e.id) + '"]');
+  return lab && lab.getBoundingClientRect().width > 2 ? lab : elementFor(s);
+}
+function paintSelection() {
+  $$(".m-sel", sheet).forEach((x) => x.classList.remove("m-sel"));
+  for (const s of S.sel) elementFor(s)?.classList.add("m-sel");
+  placeHandles();
+  $("#bgroup").disabled = !(S.canEdit && S.sel.length >= 1 && S.sel.every((s) => s.kind === "node"));
+}
+function select(hit, additive) {
+  if (!hit) S.sel = [];
+  else if (additive && hit.kind === "node" && S.sel.every((s) => s.kind === "node")) {
+    const i = S.sel.findIndex((s) => s.id === hit.id);
+    if (i >= 0) S.sel.splice(i, 1); else S.sel.push(hit);
+  } else S.sel = [hit];
+  paintSelection();
+  renderInspector();
+}
+
+/* ------------------------------------------------------------------ *
+ * View: pan, zoom, fit
+ * ------------------------------------------------------------------ */
+function applyView() {
+  sheet.style.transform = "translate(" + S.view.x + "px," + S.view.y + "px) scale(" + S.view.k + ")";
+  placeHandles();
+}
+function fit() {
+  const r = canvas.getBoundingClientRect();
+  if (!S.size.w || !r.width) return;
+  const k = Math.min((r.width - 80) / S.size.w, (r.height - 110) / S.size.h, 1.25);
+  S.view.k = Math.max(0.05, k);
+  S.view.x = (r.width - S.size.w * S.view.k) / 2;
+  S.view.y = Math.max(52, (r.height - S.size.h * S.view.k) / 2);
+  applyView();
+}
+/** Pan just enough to bring a newly added or changed item into view. */
+function reveal(target) {
+  if (!target) return;
+  const r = target.getBoundingClientRect(), c = canvas.getBoundingClientRect(), pad = 70;
+  if (r.width > c.width - 2 * pad || r.height > c.height - 2 * pad) return;
+  let dx = 0, dy = 0;
+  if (r.left < c.left + pad) dx = c.left + pad - r.left; else if (r.right > c.right - pad) dx = c.right - pad - r.right;
+  if (r.top < c.top + pad) dy = c.top + pad - r.top; else if (r.bottom > c.bottom - pad) dy = c.bottom - pad - r.bottom;
+  if (dx || dy) { S.view.x += dx; S.view.y += dy; applyView(); }
+}
+function zoomAt(cx, cy, factor) {
+  const k = Math.min(6, Math.max(0.05, S.view.k * factor));
+  const f = k / S.view.k;
+  S.view.x = cx - (cx - S.view.x) * f; S.view.y = cy - (cy - S.view.y) * f; S.view.k = k;
+  applyView();
+}
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const r = canvas.getBoundingClientRect();
+  zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0016)));
+}, { passive: false });
+$("#zin").onclick = () => { const r = canvas.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, 1.25); };
+$("#zout").onclick = () => { const r = canvas.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, 0.8); };
+$("#zfit").onclick = fit;
+
+/* pointer: click selects, double-click edits, drag pans */
+let down = null, lastClick = { t: 0, key: "" };
+canvas.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || e.target.closest("#tools, #zoom, .handle, #inline, #note")) return;
+  if ($("#inline").classList.contains("on")) finishInline(true);
+  down = { x: e.clientX, y: e.clientY, vx: S.view.x, vy: S.view.y, hit: hitTest(e.target), moved: false, shift: e.shiftKey };
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (!down) return;
+  const dx = e.clientX - down.x, dy = e.clientY - down.y;
+  if (!down.moved && Math.hypot(dx, dy) < 4) return;
+  down.moved = true; canvas.classList.add("panning");
+  S.view.x = down.vx + dx; S.view.y = down.vy + dy; applyView();
+});
+canvas.addEventListener("pointerup", (e) => {
+  if (!down) return;
+  const d = down; down = null; canvas.classList.remove("panning");
+  try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  if (d.moved) return;
+  const key = d.hit ? d.hit.kind + ":" + d.hit.id : "";
+  const now = performance.now();
+  if (d.hit && key === lastClick.key && now - lastClick.t < 420) { lastClick = { t: 0, key: "" }; S.sel = [d.hit]; paintSelection(); renderInspector(); startInline(d.hit); return; }
+  lastClick = { t: now, key };
+  select(d.hit, d.shift);
+});
+canvas.addEventListener("pointercancel", () => { down = null; canvas.classList.remove("panning"); });
+
+/* connector handles */
+const handles = [$("#h1"), $("#h2")];
+function hideHandles() { handles.forEach((h) => h.classList.remove("on")); }
+function placeHandles() {
+  hideHandles();
+  if (!S.canEdit || S.sel.length !== 1 || S.sel[0].kind !== "node" || $("#inline").classList.contains("on")) return;
+  const g = elementFor(S.sel[0]); if (!g) return;
+  const r = g.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+  const pos = [[r.right - c.left + 4, r.top + r.height / 2 - c.top - 10], [r.left + r.width / 2 - c.left - 10, r.bottom - c.top + 4]];
+  handles.forEach((h, i) => { h.style.left = pos[i][0] + "px"; h.style.top = pos[i][1] + "px"; h.classList.add("on"); });
+}
+let drag = null;
+handles.forEach((h) => {
+  h.addEventListener("pointerdown", (e) => {
+    if (S.sel.length !== 1) return;
+    e.preventDefault(); e.stopPropagation();
+    const g = elementFor(S.sel[0]), r = g.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+    drag = { from: S.sel[0].id, x0: r.left + r.width / 2 - c.left, y0: r.top + r.height / 2 - c.top, sx: e.clientX, sy: e.clientY, target: null };
+    h.setPointerCapture(e.pointerId);
+    $("#rubber").classList.add("on");
+    moveRubber(e);
+  });
+  h.addEventListener("pointermove", (e) => { if (drag) moveRubber(e); });
+  h.addEventListener("pointerup", (e) => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    $("#rubber").classList.remove("on");
+    $$(".m-target", sheet).forEach((x) => x.classList.remove("m-target"));
+    try { h.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (d.target) ops.connect(d.from, d.target);
+    else ops.addChild(d.from);          // dropped on empty space, or a plain click on the handle
+  });
+});
+function moveRubber(e) {
+  const c = canvas.getBoundingClientRect();
+  const line = $("#rubber line");
+  line.setAttribute("x1", drag.x0); line.setAttribute("y1", drag.y0);
+  line.setAttribute("x2", e.clientX - c.left); line.setAttribute("y2", e.clientY - c.top);
+  $$(".m-target", sheet).forEach((x) => x.classList.remove("m-target"));
+  drag.target = null;
+  for (const t of document.elementsFromPoint(e.clientX, e.clientY)) {
+    const g = t.closest && t.closest("g.node");
+    if (g && sheet.contains(g)) { const id = nodeIdOf(g); if (id) { drag.target = id; g.classList.add("m-target"); } break; }
+  }
+}
+
+/* in-place label editing */
+let inlineFor = null;
+function currentLabel(s) {
+  if (s.kind === "node") { const n = S.model.nodes.find((x) => x.id === s.id); return n && { text: n.label, md: n.md }; }
+  if (s.kind === "sub") { const g = S.model.subs.find((x) => x.id === s.id); return g && { text: g.title, md: g.md }; }
+  const e = S.model.edges[+s.id]; return e && { text: e.label, md: e.md };
+}
+function startInline(s) {
+  if (!S.canEdit) return;
+  const cur = currentLabel(s), target = labelElementFor(s);
+  if (!cur || !target) return;
+  hideHandles();
+  const box = $("#inline"), r = target.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+  let x = r.left - c.left, y = r.top - c.top, w = r.width, h = r.height;
+  if (s.kind === "sub") { h = 34; }
+  if (s.kind === "edge" && target.tagName === "path") { x += w / 2 - 80; y += h / 2 - 17; w = 160; h = 34; }
+  w = Math.max(150, w + 16); h = Math.max(36, Math.min(h + 8, 200));
+  x = Math.max(4, Math.min(x - 8, c.width - w - 4)); y = Math.max(4, Math.min(y - 4, c.height - h - 4));
+  Object.assign(box.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" });
+  box.value = toEdit(cur.text, cur.md);
+  inlineFor = { s, md: cur.md, before: box.value };
+  box.classList.add("on"); box.focus(); box.select();
+}
+function finishInline(save) {
+  const box = $("#inline");
+  if (!inlineFor) return;
+  const f = inlineFor; inlineFor = null;
+  box.classList.remove("on");
+  if (save && box.value !== f.before) setLabel(f.s, box.value, f.md);
+  else placeHandles();
+}
+function setLabel(s, value, md) {
+  const v = fromEdit(value, md);
+  if (s.kind === "node") return ops.node(s.id, (n) => { n.label = v || n.id; });
+  if (s.kind === "sub") return ops.sub(s.id, (g) => { g.title = v || g.id; });
+  return ops.edge(+s.id, (e) => { e.label = v; });
+}
+$("#inline").addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); finishInline(true); }
+  else if (e.key === "Escape") { e.preventDefault(); finishInline(false); }
+});
+$("#inline").addEventListener("blur", () => finishInline(true));
+$("#inline").addEventListener("pointerdown", (e) => e.stopPropagation());
+
+/* ------------------------------------------------------------------ *
+ * Inspector
+ * ------------------------------------------------------------------ */
+const hex = (v) => { v = (v || "").trim(); if (/^#[0-9a-f]{6}$/i.test(v)) return v; if (/^#[0-9a-f]{3}$/i.test(v)) return "#" + [...v.slice(1)].map((c) => c + c).join(""); return ""; };
+function colorField(label, value, key, onset) {
+  const h = hex(value);
+  const input = el("input", { type: "color", value: h || "#ffffff", class: h || value ? "" : "unset", "data-f": key, "aria-label": label + " colour", onchange: (e) => onset(e.target.value) });
+  return el("div", { class: "color" }, label, el("div", { class: "row" }, input,
+    el("button", { class: "x", title: "Use the theme colour", "aria-label": "Clear " + label + " colour", onclick: () => onset(""), disabled: !value }, "×")));
+}
+function seg(options, current, onpick, key) {
+  return el("div", { class: "seg", role: "group" }, options.map(([v, t, title]) =>
+    el("button", { class: v === current ? "on" : "", title: title || t, "data-f": key + v, onclick: () => v !== current && onpick(v) }, t)));
+}
+const field = (label, ...kids) => el("div", { class: "field" }, el("span", { class: "lab" }, label), ...kids);
+
+function renderInspector() {
+  const keep = document.activeElement && insp.contains(document.activeElement) ? document.activeElement.getAttribute("data-f") : null;
+  insp.textContent = "";
+  const m = S.model;
+  if (S.canEdit && S.sel.length === 1) {
+    const s = S.sel[0];
+    if (s.kind === "node") inspectNode(m.nodes.find((n) => n.id === s.id));
+    else if (s.kind === "edge") inspectEdge(m.edges[+s.id], +s.id);
+    else inspectSub(m.subs.find((g) => g.id === s.id));
+  } else if (S.canEdit && S.sel.length > 1) {
+    insp.append(el("h2", {}, S.sel.length + " nodes selected"), el("p", { class: "sub" }, S.sel.map((s) => s.id).join(", ")),
+      el("div", { class: "actions" },
+        el("button", { class: "btn", onclick: () => ops.group(S.sel.map((s) => s.id)) }, "Group them"),
+        el("button", { class: "btn danger", onclick: () => ops.remove(S.sel) }, "Delete")));
+  } else inspectDiagram();
+  if (keep) { const again = insp.querySelector('[data-f="' + CSS.escape(keep) + '"]'); if (again) again.focus(); }
+}
+
+function inspectDiagram() {
+  insp.append(el("h2", {}, "Diagram"), el("p", { class: "sub" }, S.type ? TYPE_NAMES[S.type] || S.type : "Nothing to show yet"));
+  if (S.canEdit) {
+    insp.append(field("Direction", seg([["TD", "Down", "Top to bottom"], ["LR", "Right", "Left to right"], ["BT", "Up", "Bottom to top"], ["RL", "Left", "Right to left"]],
+      S.model.dir === "TB" ? "TD" : S.model.dir, (d) => ops.direction(d), "dir")));
+  }
+  if (S.type) {
+    const cur = currentTheme();
+    const sel = el("select", { "data-f": "theme", onchange: (e) => setTheme(e.target.value) },
+      ["default", "neutral", "dark", "forest", "base"].map((t) => el("option", { value: t, selected: t === cur }, t[0].toUpperCase() + t.slice(1))));
+    insp.append(el("div", { class: "field" }, el("label", { for: "themesel" }, "Theme (saved in the file)"), Object.assign(sel, { id: "themesel" })));
+  }
+  if (S.canEdit) {
+    insp.append(el("dl", { class: "tips" },
+      el("dt", {}, "Select"), el("dd", {}, "Click a node, link or group. Shift-click adds nodes."),
+      el("dt", {}, "Rename"), el("dd", {}, "Double-click, or press ", el("kbd", {}, "Enter"), "."),
+      el("dt", {}, "Connect"), el("dd", {}, "Drag the pink + from a selected node onto another node. Drop it on empty space, or press ", el("kbd", {}, "Tab"), ", to add a connected node."),
+      el("dt", {}, "Delete"), el("dd", {}, "Press ", el("kbd", {}, "Delete"), "."),
+      el("dt", {}, "Move around"), el("dd", {}, "Drag to pan, scroll to zoom. Mermaid arranges the boxes itself, so they cannot be dragged to a new spot.")));
+  } else if (S.whyNot) insp.append(el("p", { class: "tips" }, S.whyNot));
+}
+
+function inspectNode(n) {
+  if (!n) return;
+  const classic = !n.shape || SHAPES[n.shape];
+  const groupSel = el("select", { "data-f": "ngroup", onchange: (e) => ops.moveToGroup(n.id, e.target.value) },
+    el("option", { value: "" }, "None"),
+    S.model.subs.map((g) => el("option", { value: g.id, selected: parents(S.model).get(n.id) === g.id }, toEdit(g.title, g.md).replace(/\n/g, " ") || g.id)));
+  insp.append(
+    el("h2", {}, "Node"),
+    el("p", { class: "sub" }, "ID " + n.id),
+    field("Text", el("textarea", { "data-f": "nlabel", rows: 3, onchange: (e) => setLabel({ kind: "node", id: n.id }, e.target.value, n.md) }, toEdit(n.label, n.md))),
+    field("Shape", el("div", { class: "shapes" }, SHAPE_UI.map(([key, name, glyph]) => {
+      const b = el("button", { class: (n.shape || "square") === key ? "on" : "", title: name, "aria-label": name, "data-f": "shape" + key,
+        onclick: () => ops.node(n.id, (x) => { x.shape = key; x.extra = {}; }) });
+      b.innerHTML = '<svg viewBox="0 0 32 20">' + glyph + "</svg>";
+      return b;
+    })), classic ? null : el("div", { class: "sub", style: "margin:6px 0 0" }, "Current shape: " + n.shape)),
+    field("Colours", el("div", { class: "colors" },
+      colorField("Fill", getStyleProp(n.styles, "fill"), "nfill", (v) => ops.node(n.id, (x) => { x.styles = setStyleProp(x.styles, "fill", v); })),
+      colorField("Border", getStyleProp(n.styles, "stroke"), "nstroke", (v) => ops.node(n.id, (x) => { x.styles = setStyleProp(x.styles, "stroke", v); })),
+      colorField("Text", getStyleProp(n.styles, "color"), "ncolor", (v) => ops.node(n.id, (x) => { x.styles = setStyleProp(x.styles, "color", v); })))),
+    S.model.subs.length ? field("Group", groupSel) : null,
+    field("ID (used in the code)", el("input", { type: "text", value: n.id, "data-f": "nid", onchange: (e) => { if (!ops.rename(n.id, e.target.value.trim())) e.target.value = n.id; } })),
+    el("div", { class: "actions" },
+      el("button", { class: "btn", onclick: () => ops.addChild(n.id) }, "Add connected node"),
+      el("button", { class: "btn danger", onclick: () => ops.remove(S.sel) }, "Delete")));
+}
+
+function inspectEdge(e, idx) {
+  if (!e) return;
+  const head = e.type.replace("double_", "").replace("arrow_", "");
+  const dbl = e.type.startsWith("double_");
+  const setType = (h, d) => ops.edge(idx, (x) => { x.type = (d && h !== "open" ? "double_" : "") + "arrow_" + h; });
+  insp.append(
+    el("h2", {}, "Link"),
+    el("p", { class: "sub" }, e.start + " to " + e.end),
+    field("Text", el("textarea", { "data-f": "elabel", rows: 2, onchange: (ev) => setLabel({ kind: "edge", id: String(idx) }, ev.target.value, e.md) }, toEdit(e.label, e.md))),
+    field("Line", seg([["normal", "Solid"], ["dotted", "Dotted"], ["thick", "Thick"], ["invisible", "Hidden", "Affects the layout but is not drawn"]], e.stroke,
+      (v) => ops.edge(idx, (x) => { x.stroke = v; if (v === "invisible") x.type = "arrow_open"; }), "estroke")),
+    e.stroke === "invisible" ? null : field("End", seg([["point", "Arrow"], ["open", "None"], ["circle", "Circle"], ["cross", "Cross"]], head, (v) => setType(v, dbl), "ehead")),
+    e.stroke === "invisible" || head === "open" ? null : el("div", { class: "field" }, el("label", { class: "check" },
+      el("input", { type: "checkbox", checked: dbl, "data-f": "edbl", onchange: (ev) => setType(head, ev.target.checked) }), "Same marker on both ends")),
+    field("Length (rows it spans)", seg([[1, "1"], [2, "2"], [3, "3"], [4, "4"]], Math.min(4, e.length), (v) => ops.edge(idx, (x) => { x.length = v; }), "elen")),
+    e.stroke === "invisible" ? null : field("Colour", el("div", { class: "colors" },
+      colorField("Line", getStyleProp(e.style, "stroke"), "ecolor", (v) => ops.edge(idx, (x) => { x.style = setStyleProp(x.style, "stroke", v); })))),
+    el("div", { class: "actions" },
+      el("button", { class: "btn", onclick: () => ops.edge(idx, (x) => { [x.start, x.end] = [x.end, x.start]; }) }, "Reverse direction"),
+      el("button", { class: "btn danger", onclick: () => ops.remove(S.sel) }, "Delete")));
+}
+
+function inspectSub(g) {
+  if (!g) return;
+  insp.append(
+    el("h2", {}, "Group"),
+    el("p", { class: "sub" }, "ID " + g.id + ", " + g.nodes.length + " inside"),
+    field("Title", el("textarea", { "data-f": "gtitle", rows: 2, onchange: (e) => setLabel({ kind: "sub", id: g.id }, e.target.value, g.md) }, toEdit(g.title, g.md))),
+    field("Direction inside", seg([["", "Auto"], ["TB", "Down"], ["LR", "Right"], ["BT", "Up"], ["RL", "Left"]], g.dir === "TD" ? "TB" : g.dir, (d) => ops.sub(g.id, (x) => { x.dir = d; }), "gdir")),
+    field("Colours", el("div", { class: "colors" },
+      colorField("Fill", getStyleProp(g.styles, "fill"), "gfill", (v) => ops.sub(g.id, (x) => { x.styles = setStyleProp(x.styles, "fill", v); })),
+      colorField("Border", getStyleProp(g.styles, "stroke"), "gstroke", (v) => ops.sub(g.id, (x) => { x.styles = setStyleProp(x.styles, "stroke", v); })),
+      colorField("Text", getStyleProp(g.styles, "color"), "gcolor", (v) => ops.sub(g.id, (x) => { x.styles = setStyleProp(x.styles, "color", v); })))),
+    el("div", { class: "actions" },
+      el("button", { class: "btn", onclick: () => ops.addNode(g.id) }, "Add node inside"),
+      el("button", { class: "btn danger", title: "Removes the frame and keeps the nodes", onclick: () => ops.remove(S.sel) }, "Ungroup")));
+}
+
+/* theme lives in the file, so the PNG converter and other tools see it too */
+function currentTheme() {
+  const fm = S.text.match(/^\s*---\n([\s\S]*?)\n---/);
+  let m = fm && fm[1].match(/^\s*theme:\s*["']?([\w-]+)/m);
+  if (!m) m = S.text.match(/%%\{[\s\S]*?["']?theme["']?\s*:\s*["']([\w-]+)["'][\s\S]*?\}%%/);
+  return m ? m[1] : "default";
+}
+function setTheme(name) {
+  let t = S.text;
+  const init = /(%%\{[\s\S]*?["']?theme["']?\s*:\s*["'])([\w-]+)(["'][\s\S]*?\}%%)/;
+  const fm = t.match(/^(\s*---\n)([\s\S]*?)(\n---[ \t]*\n?)/);
+  if (init.test(t)) t = t.replace(init, "$1" + name + "$3");
+  else if (fm && /^\s*theme:/m.test(fm[2])) t = t.replace(fm[0], fm[1] + fm[2].replace(/^(\s*theme:\s*).*$/m, "$1" + name) + fm[3]);
+  else if (fm && /^config:\s*$/m.test(fm[2])) t = t.replace(fm[0], fm[1] + fm[2].replace(/^config:\s*$/m, "config:\n  theme: " + name) + fm[3]);
+  else if (fm) t = t.replace(fm[0], fm[1] + fm[2] + "\nconfig:\n  theme: " + name + fm[3]);
+  else if (name !== "default") t = "---\nconfig:\n  theme: " + name + "\n---\n" + t;
+  if (t !== S.text) setText(t, { record: true });
+}
+
+/* ------------------------------------------------------------------ *
+ * Files
+ * ------------------------------------------------------------------ */
+const FILE_TYPES = [{ description: "Mermaid diagram", accept: { "text/plain": [".mmd", ".mermaid"] } }];
+function fromMarkdown(text, name) {
+  if (!/\.(md|markdown|mdx)$/i.test(name)) return text;
+  const m = text.match(/^[ \t]*(`{3,}|~{3,})[ \t]*mermaid[^\n]*\n([\s\S]*?)^[ \t]*\1/m);
+  return m ? m[2] : text;
+}
+function loadDoc(text, name, handle) {
+  S.fileName = name; S.handle = handle || null;
+  setText(text.replace(/^﻿/, "").replace(/\r\n?/g, "\n"), { reset: true });
+}
+function okToDiscard() { return S.text === S.saved || confirm("You have unsaved changes. Discard them?"); }
+async function openFile() {
+  if (!okToDiscard()) return;
+  if (window.showOpenFilePicker) {
+    try {
+      const [h] = await showOpenFilePicker({ types: [{ description: "Mermaid or Markdown", accept: { "text/plain": [".mmd", ".mermaid", ".md", ".txt"] } }] });
+      const f = await h.getFile();
+      const isMd = /\.(md|markdown|mdx)$/i.test(f.name);
+      loadDoc(fromMarkdown(await f.text(), f.name), isMd ? f.name.replace(/\.\w+$/, ".mmd") : f.name, isMd ? null : h);
+    } catch (e) { if (e.name !== "AbortError") toast("Could not open the file: " + e.message, true); }
+  } else $("#filein").click();
+}
+$("#filein").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (f) loadDoc(fromMarkdown(await f.text(), f.name), f.name.replace(/\.(md|markdown|mdx|txt)$/i, ".mmd"), null);
+});
+function download(blob, name) {
+  const a = el("a", { href: URL.createObjectURL(blob), download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+async function saveFile(as) {
+  const text = S.text;
+  try {
+    if (window.showSaveFilePicker) {
+      if (as || !S.handle) S.handle = await showSaveFilePicker({ suggestedName: S.fileName, types: FILE_TYPES });
+      const w = await S.handle.createWritable();
+      await w.write(text); await w.close();
+      S.fileName = S.handle.name;
+      toast("Saved " + S.fileName);
+    } else {
+      if (as || S.fileName === "untitled.mmd") {
+        const n = prompt("File name", S.fileName);
+        if (!n) return;
+        S.fileName = /\.\w+$/.test(n) ? n : n + ".mmd";
+      }
+      download(new Blob([text], { type: "text/plain" }), S.fileName);
+      toast("Downloaded " + S.fileName);
+    }
+    S.saved = text; updateChrome();
+  } catch (e) { if (e.name !== "AbortError") toast("Could not save: " + e.message, true); }
+}
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  const item = e.dataTransfer.items && e.dataTransfer.items[0], f = e.dataTransfer.files[0];
+  if (!f || !okToDiscard()) return;
+  let handle = null;
+  try { if (item && item.getAsFileSystemHandle) handle = await item.getAsFileSystemHandle(); } catch (_) {}
+  const isMd = /\.(md|markdown|mdx)$/i.test(f.name);
+  loadDoc(fromMarkdown(await f.text(), f.name), isMd ? f.name.replace(/\.\w+$/, ".mmd") : f.name, isMd ? null : handle);
+});
+window.addEventListener("beforeunload", (e) => { if (S.text !== S.saved) { e.preventDefault(); e.returnValue = ""; } });
+
+/* ------------------------------------------------------------------ *
+ * Export
+ * ------------------------------------------------------------------ */
+const baseName = () => S.fileName.replace(/\.\w+$/, "") || "diagram";
+function cleanSvg(svgText) {
+  const doc = new DOMParser().parseFromString(svgText, "text/html");
+  const svg = doc.querySelector("svg");
+  const vb = (svg.getAttribute("viewBox") || "0 0 100 100").split(/\s+/).map(Number);
+  svg.setAttribute("width", vb[2]); svg.setAttribute("height", vb[3]);
+  svg.style.maxWidth = "none";
+  svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  return { text: new XMLSerializer().serializeToString(svg), w: vb[2], h: vb[3] };
+}
+function svgToPng(svgText, w, h, scale, bg) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const pad = 16, c = document.createElement("canvas");
+        c.width = Math.ceil((w + pad * 2) * scale); c.height = Math.ceil((h + pad * 2) * scale);
+        const g = c.getContext("2d");
+        g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, pad * scale, pad * scale, w * scale, h * scale);
+        c.toBlob((b) => (b ? resolve(b) : reject(new Error("empty image"))), "image/png");
+      } catch (e) { reject(e); }
+    };
+    img.onerror = () => reject(new Error("the browser could not draw the diagram"));
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText);
+  });
+}
+async function exportPng() {
+  if (!S.lastSvg) return toast("There is no diagram to export yet.", true);
+  const bg = canvas.classList.contains("dark") ? "#1e1e1e" : "#ffffff";
+  const first = cleanSvg(S.lastSvg);
+  const scale = Math.min(2, 12000 / Math.max(first.w, first.h));
+  try {
+    download(await svgToPng(first.text, first.w, first.h, scale, bg), baseName() + ".png");
+    toast("Downloaded " + baseName() + ".png");
+  } catch (e) {
+    try {   // some browsers refuse to rasterise HTML labels: draw again with plain SVG text
+      const flat = await mermaid.render("mx" + ++S.rid, "%%{init: {\"flowchart\": {\"htmlLabels\": false}, \"htmlLabels\": false}}%%\n" + S.text);
+      const c = cleanSvg(flat.svg);
+      download(await svgToPng(c.text, c.w, c.h, scale, bg), baseName() + ".png");
+      toast("Downloaded " + baseName() + ".png (plain-text labels)");
+    } catch (e2) { toast("PNG export failed in this browser. Export SVG instead, or use mermaid2png.py.", true); }
+  }
+}
+function exportSvg() {
+  if (!S.lastSvg) return toast("There is no diagram to export yet.", true);
+  download(new Blob([cleanSvg(S.lastSvg).text], { type: "image/svg+xml" }), baseName() + ".svg");
+}
+
+/* ------------------------------------------------------------------ *
+ * Wiring
+ * ------------------------------------------------------------------ */
+let typeTimer, histTimer;
+src.addEventListener("input", () => {
+  S.text = src.value; updateChrome(); drawGutter();
+  clearTimeout(typeTimer); typeTimer = setTimeout(() => setText(src.value, { fromEditor: true }), 220);
+  clearTimeout(histTimer); histTimer = setTimeout(() => { pushHistory(src.value); updateChrome(); }, 600);
+});
+src.addEventListener("scroll", () => ($("#gutter").scrollTop = src.scrollTop));
+src.addEventListener("keydown", (e) => {
+  if (e.key === "Tab") { e.preventDefault(); document.execCommand("insertText", false, "    "); }
+});
+$("#bopen").onclick = openFile;
+$("#bsave").onclick = () => saveFile(false);
+$("#bsaveas").onclick = () => saveFile(true);
+$("#bundo").onclick = undo; $("#bredo").onclick = redo;
+$("#bpng").onclick = exportPng; $("#bsvg").onclick = exportSvg;
+$("#baddnode").onclick = () => ops.addNode(S.sel.length === 1 && S.sel[0].kind === "sub" ? S.sel[0].id : "");
+$("#bgroup").onclick = () => ops.group(S.sel.map((s) => s.id));
+$("#bcode").onclick = () => { const hidden = $("#code").classList.toggle("hidden"); $("#bcode").textContent = hidden ? "Show code" : "Hide code"; placeHandles(); };
+for (const [name, text] of Object.entries(TEMPLATES)) {
+  $("#newlist").append(el("button", { onclick: () => { $("#newmenu").classList.remove("open"); if (okToDiscard()) loadDoc(text, "untitled.mmd", null); } }, name));
+}
+$("#bnew").onclick = (e) => { e.stopPropagation(); $("#newmenu").classList.toggle("open"); };
+document.addEventListener("click", () => $("#newmenu").classList.remove("open"));
+
+/* splitter */
+(() => {
+  const sp = $("#split"); let on = false;
+  sp.addEventListener("pointerdown", (e) => { on = true; sp.classList.add("drag"); sp.setPointerCapture(e.pointerId); });
+  sp.addEventListener("pointermove", (e) => { if (on) { $("#code").style.width = Math.max(180, Math.min(e.clientX, innerWidth - 420)) + "px"; placeHandles(); } });
+  sp.addEventListener("pointerup", () => { on = false; sp.classList.remove("drag"); });
+})();
+window.addEventListener("resize", placeHandles);
+
+document.addEventListener("keydown", (e) => {
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (mod && k === "s") { e.preventDefault(); saveFile(e.shiftKey); return; }
+  if (mod && k === "o") { e.preventDefault(); openFile(); return; }
+  if (mod && k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && k === "y") { e.preventDefault(); redo(); return; }
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if (typing || mod) return;
+  if (e.key === "Escape") { select(null); return; }
+  if (!S.canEdit || (document.activeElement.tagName === "BUTTON" && (e.key === "Enter" || e.key === " "))) return;
+  if ((e.key === "Delete" || e.key === "Backspace") && S.sel.length) { e.preventDefault(); ops.remove(S.sel); }
+  else if ((e.key === "Enter" || e.key === "F2") && S.sel.length === 1) { e.preventDefault(); startInline(S.sel[0]); }
+  else if (e.key === "Tab" && S.sel.length === 1 && S.sel[0].kind === "node") { e.preventDefault(); ops.addChild(S.sel[0].id); }
+  else if (e.key === "0") fit();
+});
+
+/* start: restore the last draft, or open the flowchart template */
+(() => {
+  let draft = null;
+  try { draft = JSON.parse(localStorage.getItem("mermaid-visual-editor") || "null"); } catch (_) {}
+  if (draft && typeof draft.text === "string" && draft.text.trim()) { loadDoc(draft.text, draft.fileName || "untitled.mmd", null); S.saved = ""; updateChrome(); }
+  else loadDoc(TEMPLATES["Flowchart"], "untitled.mmd", null);
+})();
+window.__editor = { S, ops, setText, serialize, buildModel, parseFlow, signature, refresh, select, startInline, finishInline, loadDoc, exportPng, cleanSvg, svgToPng, setTheme, currentTheme, undo, redo, fit };
+</script>
+</body>
+</html>

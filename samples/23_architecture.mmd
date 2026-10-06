@@ -1,0 +1,12 @@
+architecture-beta
+    group cloud(cloud)[Cloud]
+    group data(database)[Data tier] in cloud
+
+    service gateway(internet)[Gateway] in cloud
+    service api(server)[API server] in cloud
+    service db(database)[Primary DB] in data
+    service files(disk)[Object storage] in data
+
+    gateway:R --> L:api
+    api:R --> L:db
+    api:B --> T:files

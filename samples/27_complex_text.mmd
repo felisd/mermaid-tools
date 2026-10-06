@@ -1,0 +1,23 @@
+flowchart TD
+    multi["<b>Multi-line block</b><br/>Line two with <i>italics</i><br/>Line three with <u>underline</u><br/><small>and a small footnote</small>"]
+    punct["Punctuation: f(x) = a[i] + b{j}; x > 0 && y < 10 | z != 'q' #quot;ok#quot; 100% @home"]
+    code["<div style='text-align:left;white-space:pre;font-family:monospace'>if (hr > 180 || hr < 30) {<br/>    return ERR_RANGE;<br/>}</div>"]
+    md["`**Markdown block**
+    A long paragraph that wraps on its own without any manual breaks, with *emphasis* in the middle
+    and an explicit second line`"]
+    list["<b>Checklist</b><div style='text-align:left'><ul><li>first item</li><li>second, longer item</li><li>third</li></ul></div>"]
+    styled["<span style='color:crimson;font-size:20px'>Coloured 20px</span><br/><span style='font-family:monospace'>monospace 0x1F4A9</span><br/>H<sub>2</sub>O and E = mc<sup>2</sup>"]
+    math["$$\hat{x}_k = \frac{1}{N}\sum_{i=1}^{N} x_i \cdot e^{-j 2\pi k i / N}$$"]
+    table["<table><tr><th>Band</th><th>Hz</th></tr><tr><td>Low</td><td>0.5 - 4</td></tr><tr><td>High</td><td>4 - 40</td></tr></table>"]
+    mixed["混合 mixed 文本 with 🚀 emoji<br/>Ελληνικά · Русский · العربية · עברית<br/>—dashes–, “curly quotes”, ellipsis…"]
+    para["A very long single-line description that has no breaks at all and keeps going to see where the automatic wrapping kicks in and whether the box still grows tall enough to hold every word without clipping anything at the bottom edge"]
+
+    multi -->|"edge label with<br/><b>two lines</b>"| punct
+    multi --> code
+    punct -->|"x > 0 (yes)"| md
+    code --> list
+    md --> styled
+    list --> math
+    styled --> table
+    math --> mixed
+    table --> para

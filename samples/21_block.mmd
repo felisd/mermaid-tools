@@ -1,0 +1,17 @@
+block-beta
+    columns 3
+    client["Client"]:3
+    space:3
+    lb["Load balancer"]:3
+    space:3
+    web1["Web 1"] web2["Web 2"] web3["Web 3"]
+    space:3
+    db[("Database")]:2 cache[("Cache")]
+    client --> lb
+    lb --> web1
+    lb --> web2
+    lb --> web3
+    web2 --> db
+    web3 --> cache
+    style lb fill:#d0ebff,stroke:#1971c2
+    style db fill:#d3f9d8,stroke:#2f9e44

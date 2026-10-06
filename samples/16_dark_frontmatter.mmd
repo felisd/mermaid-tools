@@ -1,0 +1,16 @@
+---
+title: Deployment pipeline (dark theme from front matter)
+config:
+  theme: dark
+  flowchart:
+    curve: basis
+---
+flowchart LR
+    dev[Developer] -->|git push| repo[(Repository)]
+    repo --> ci{CI passes?}
+    ci -- yes --> build[Build image]
+    ci -- no --> notify[Notify author]
+    build --> staging[Staging]
+    staging --> approve{Approved?}
+    approve -- yes --> prod[Production]
+    approve -- no --> notify

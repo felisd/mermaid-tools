@@ -1,0 +1,11 @@
+flowchart LR
+    en["English: Hello, world!"] --> zh["中文: 你好，世界"]
+    zh --> ja["日本語: こんにちは世界"]
+    ja --> ko["한국어: 안녕하세요"]
+    ko --> emoji["Emoji 🚀 ✅ ❤️ 📊"]
+    emoji --> sym["Symbols: α β γ ≤ ≥ ∑ → € £ ¥"]
+
+    html["<b>Bold</b>, <i>italic</i><br/>second line<br/>third line"] --> md["`**Markdown** string with
+    an _automatic_ line wrap that is long enough to wrap`"]
+    md --> quotes["Quotes #quot;inside#quot; &amp; ampersand #35;hash"]
+    quotes --> long["A deliberately long label to check that wide text boxes are measured correctly and never get clipped"]

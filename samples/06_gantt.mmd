@@ -1,0 +1,20 @@
+gantt
+    title Product launch plan
+    dateFormat YYYY-MM-DD
+    axisFormat %b %d
+    excludes weekends
+
+    section Design
+    Requirements          :done,    req, 2026-01-05, 7d
+    UX wireframes         :done,    ux,  after req, 8d
+    Visual design         :active,  vis, after ux, 10d
+
+    section Build
+    Backend API           :crit,    api, 2026-01-19, 20d
+    Mobile client         :         mob, after vis, 18d
+    Integration           :         int, after api, 6d
+
+    section Release
+    Beta testing          :         beta, after int, 10d
+    Fix critical bugs     :crit,    fix, after beta, 5d
+    Launch                :milestone, after fix, 0d

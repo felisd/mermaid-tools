@@ -1,0 +1,38 @@
+classDiagram
+    direction LR
+    class Shape {
+        <<abstract>>
+        #String id
+        +Color fill
+        +area() double*
+        +draw(Canvas c) void
+    }
+    class Circle {
+        -double radius
+        +area() double
+    }
+    class Polygon {
+        -List~Point~ vertices
+        +area() double
+        +addVertex(Point p) void
+    }
+    class Point {
+        +double x
+        +double y
+    }
+    class Canvas {
+        +int width
+        +int height
+        +render(List~Shape~ shapes) Image
+    }
+    class Drawable {
+        <<interface>>
+        +draw(Canvas c) void
+    }
+    Drawable <|.. Shape
+    Shape <|-- Circle
+    Shape <|-- Polygon
+    Polygon "1" *-- "3..*" Point : vertices
+    Canvas "1" o-- "0..*" Shape : contains
+    Canvas ..> Drawable : uses
+    note for Shape "area() is abstract"

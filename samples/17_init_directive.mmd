@@ -1,0 +1,10 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffe8cc", "primaryBorderColor": "#e8590c", "primaryTextColor": "#5c2b00", "lineColor": "#e8590c", "secondaryColor": "#d0ebff", "tertiaryColor": "#fff9db", "fontFamily": "Georgia, serif", "fontSize": "18px"}}}%%
+flowchart TB
+    A[Custom theme variables] --> B(Rounded)
+    A --> C{Decision}
+    C -->|one| D[Result 1]
+    C -->|two| E[Result 2]
+    subgraph Group
+        D
+        E
+    end

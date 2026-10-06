@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as Mobile App
+    participant API as API Gateway
+    participant Auth as Auth Service
+    participant DB as Database
+
+    User->>App: Tap "Sign in"
+    App->>+API: POST /login
+    API->>+Auth: Verify credentials
+    Auth->>+DB: SELECT user
+    DB-->>-Auth: user row
+    alt Credentials valid
+        Auth-->>API: 200 + JWT
+        API-->>App: Session token
+        App-->>User: Home screen
+    else Invalid password
+        Auth-->>-API: 401 Unauthorized
+        API-->>-App: Error
+        App-->>User: "Try again"
+    end
+    Note over App,API: Token is refreshed every 15 min
+    loop Every 15 minutes
+        App->>API: POST /refresh
+        API-->>App: New token
+    end
+    par Analytics
+        App-)API: Track event
+    and Push
+        API-)App: Notification
+    end
+    rect rgb(235, 245, 255)
+        User->>App: Log out
+        App-xAPI: DELETE /session
+    end

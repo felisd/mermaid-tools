@@ -1,0 +1,11 @@
+C4Context
+    title System context for an online banking system
+    Person(customer, "Customer", "A customer of the bank")
+    System(banking, "Internet Banking", "Lets customers view accounts and make payments")
+    System_Ext(mail, "E-mail System", "Sends e-mails")
+    System_Ext(mainframe, "Mainframe Banking", "Stores all core banking data")
+    Rel(customer, banking, "Uses")
+    Rel(banking, mail, "Sends e-mail using")
+    Rel(banking, mainframe, "Reads and writes")
+    Rel_Back(customer, mail, "Sends e-mails to")
+    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")

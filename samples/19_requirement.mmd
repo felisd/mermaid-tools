@@ -1,0 +1,29 @@
+requirementDiagram
+    requirement uptime {
+        id: 1
+        text: The service is available 99.9 percent of the time
+        risk: high
+        verifymethod: test
+    }
+    functionalRequirement failover {
+        id: 1.1
+        text: Traffic moves to a standby region within 60 seconds
+        risk: medium
+        verifymethod: demonstration
+    }
+    performanceRequirement latency {
+        id: 1.2
+        text: p95 response time is below 200 ms
+        risk: low
+        verifymethod: analysis
+    }
+    element load_test {
+        type: simulation
+    }
+    element runbook {
+        type: document
+    }
+    uptime - contains -> failover
+    uptime - contains -> latency
+    load_test - verifies -> latency
+    runbook - satisfies -> failover
